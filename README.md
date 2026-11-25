@@ -4,11 +4,26 @@
 
 Scrub sensitive info out of photos and PDFs while keeping the layout readable, so an AI can learn the structure of a document without seeing the real data.
 
-- **Numbers** become `#`, **letters** become random letters (case kept), **symbols** stay: `jane.doe@mail.com` → `xqzm.tpe@pwea.bok`, `(555) 014-2290` → `(###) ###-####`.
-- **Smart mode** (default) keeps labels and headings visible (`Name:`, `Total Due:`, `Description`, `Billing Details`…) and only scrubs the values. Anything with a digit or `@` is always scrubbed. There's also a "Scrub every word" mode and an "Also keep these words" box.
-- **Review screen**: green outlines show what was left visible. Tap any word to hide/show it, or use **Add box** to cover anything the text reader missed.
-- **Exports match the input**: PNG → PNG, JPG → JPG, WebP → WebP, PDF → PDF (multi-page). **Download all** saves each file separately in its own format; **As .zip** bundles them. HEIC/GIF/BMP come back as JPG/PNG since browsers can't write those.
-- **Private**: OCR (Tesseract.js), PDF reading (pdf.js) and export (jsPDF, JSZip) all run in your browser from the `vendor/` folder. Nothing is uploaded.
+- **Smart filter**: every value is sorted into a type — names, emails, phone numbers, addresses, dates, money, IDs & account numbers, other numbers, links & usernames, other text — and you pick which types get scrubbed (with live counts). Presets: Smart, Names only, Contact info, Numbers, Everything. Labels and headings (`Name:`, `Total Due:`, column headers, big titles) stay readable by default.
+- **Scrambling**: numbers become `#`, letters become random letters (case kept), symbols stay: `jane.doe@mail.com` → `xqzm.tpe@pwea.bok`, `(555) 014-2290` → `(###) ###-####`.
+- **Review & edit**: tap any word to hide/show it, or draw a lasso to **Hide** words, **Show** words (also removes covers), or **Cover** any area (photos, logos, signatures). Undo, zoom, hold-to-compare, and per-file filter overrides.
+- **Exports match the input**: PNG → PNG, JPG → JPG, WebP → WebP, PDF → PDF (multi-page). **Save all** saves each file separately (on phones it opens the share sheet); **.zip** bundles them. HEIC/GIF/BMP come back as JPG/PNG.
+- **Private**: OCR (Tesseract.js), PDF reading (pdf.js) and export (jsPDF, JSZip) run in your browser from `vendor/`. Nothing is uploaded.
+
+## Project layout
+
+```
+index.html        markup
+css/app.css       styles + animations
+js/main.js        app state, file list, filters, saving
+js/ocr.js         file loading + 3 OCR passes
+js/classify.js    sorts words into categories
+js/vocab.js       label words, first/last names, states, street types
+js/paint.js       draws the scrubbed page
+js/viewer.js      review sheet: tap, lasso, cover, undo, zoom
+js/exporter.js    same-format export, share/download, zip
+vendor/           third-party libraries (local copies)
+```
 
 ## Use it
 
@@ -22,7 +37,7 @@ then go to http://localhost:8000. (Opening the file directly with `file://` won'
 
 ## Limits
 
-Text recognition can miss tiny, faint, stylized or handwritten text, and it doesn't detect photos, logos or signatures. Always review each file before sharing it. Scanning uses three passes per page (normal, light-on-dark, and a block pass for short isolated values); "Faster, lower detail scan" skips the light-on-dark pass and uses lower resolution.
+Text recognition can miss tiny, faint, stylized or handwritten text, and it doesn't detect photos, logos or signatures (use Cover). Name detection uses labels (`Name:`, `Customer:`…), column headers, titles (Mr., Dr.) and a list of common first/last names, so unusual names outside those cues land in "Other text". Always review each file before sharing it. Scanning uses three passes per page (normal, light-on-dark, and a block pass for short isolated values); "Faster, lower detail scan" skips the light-on-dark pass and uses lower resolution.
 
 ## Third-party code (in `vendor/`)
 
