@@ -5,7 +5,7 @@
 Scrub sensitive info out of photos and PDFs while keeping the layout readable, so an AI can learn the structure of a document without seeing the real data.
 
 - **Smart filter**: every value is sorted into a type — names, emails, phone numbers, addresses, dates, money, IDs & account numbers, other numbers, links & usernames, other text — and you pick which types get scrubbed (with live counts). Presets: Smart, Names only, Contact info, Numbers, Everything. Labels and headings (`Name:`, `Total Due:`, column headers, big titles) stay readable by default.
-- **Scrambling**: numbers become `#`, letters become random letters (case kept), symbols stay: `jane.doe@mail.com` → `xqzm.tpe@pwea.bok`, `(555) 014-2290` → `(###) ###-####`.
+- **Scrambling**: numbers become `#`, letters become `a` (`A` if capital), symbols stay: `jane.doe@mail.com` → `aaaa.aaa@aaaa.aaa`, `(555) 014-2290` → `(###) ###-####`.
 - **Review & edit**: tap any word to hide/show it, or draw a lasso to **Hide** words, **Show** words (also removes covers), or **Cover** any area (photos, logos, signatures). Undo, zoom, hold-to-compare, and per-file filter overrides.
 - **Exports match the input**: PNG → PNG, JPG → JPG, WebP → WebP, PDF → PDF (multi-page). **Save all** saves each file separately (on phones it opens the share sheet); **.zip** bundles them. HEIC/GIF/BMP come back as JPG/PNG.
 - **Private**: OCR (Tesseract.js), PDF reading (pdf.js) and export (jsPDF, JSZip) run in your browser from `vendor/`. Nothing is uploaded.

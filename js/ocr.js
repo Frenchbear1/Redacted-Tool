@@ -18,13 +18,12 @@ function getWorker() {
 }
 export const warmUp = () => getWorker().catch(() => {});
 
-const rand = n => Math.floor(Math.random() * n);
-const LOW = 'abcdefghijklmnopqrstuvwxyz';
+// Digits → #, letters → a (A if uppercase), everything else kept.
 export function scramble(t) {
   let o = '';
   for (const ch of t) {
     if (/\p{Nd}/u.test(ch)) o += '#';
-    else if (/\p{L}/u.test(ch)) { const c = LOW[rand(26)]; o += ch !== ch.toLowerCase() ? c.toUpperCase() : c; }
+    else if (/\p{L}/u.test(ch)) o += ch !== ch.toLowerCase() ? 'A' : 'a';
     else o += ch;
   }
   return o;
