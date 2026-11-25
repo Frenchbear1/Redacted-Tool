@@ -1,5 +1,5 @@
 // Sorts every OCR word into a category so the user can choose what gets scrubbed.
-import { LABELS, MONTHS, STREET, STATES, TITLES, FIRST, LAST, CONTEXT } from './vocab.js';
+import { LABELS, MONTHS, STREET, STATES, TITLES, FIRST, LAST, CONTEXT } from './vocab.js?v=5';
 
 export const CATS = [
   { id: 'names', label: 'Names', on: true },
@@ -85,10 +85,66 @@ function joinMatch(vals, i, re, max = 4) {
 }
 
 // Word groups the AI model reads as one sentence (a visual line segment).
+// Whole visual lines, so a table row gives the model context ("Meyer Jane Planning Director").
 export function nerLines(words) {
-  const out = [];
-  for (const l of buildLines(words)) for (const run of l.runs) out.push(run);
-  return out;
+  return buildLines(words).map(l => l.ws);
+}
+// The model is case-sensitive: "MCCONNELL" reads like an acronym, "Mcconnell" like a name.
+export function nerText(t) {
+  return /^[\p{Lu}][\p{Lu}'’.-]+[,;:]?$/u.test(t) ? t[0] + t.slice(1).toLowerCase() : t;
+}
+
+// Table columns: if a good share of a column's cells are names, the rest of that column is too.
+function columnVote(lines, extra) {
+  const all = lines.flatMap(l => l.ws);
+  if (all.length < 12) return;
+  const pageW = Math.max(...all.map(w => w.b.x1));
+  const tol = Math.max(8, pageW * 0.012);
+  // column anchors: x positions where many words start
+  const xs = all.map(w => w.b.x0).sort((a, b) => a - b), anchors = [];
+  for (let i = 0; i < xs.length;) {
+    let j = i; while (j + 1 < xs.length && xs[j + 1] - xs[i] <= tol) j++;
+    if (j - i + 1 >= 4) anchors.push(xs.slice(i, j + 1).reduce((a, b) => a + b) / (j - i + 1));
+    i = j + 1;
+  }
+  if (anchors.length < 2) return;
+  const near = x => anchors.findIndex(a => Math.abs(a - x) <= tol);
+  // cells: runs split again wherever a word starts on a column anchor
+  const cols = new Map();
+  lines.forEach((l, li) => { for (const run of l.runs) {
+    let cell = [], col = -1;
+    const push = () => { if (cell.length && col >= 0) { cell.li = li; if (!cols.has(col)) cols.set(col, []); cols.get(col).push(cell); } };
+    for (const w of run) {
+      const a = near(w.b.x0);
+      if (a >= 0 && cell.length && a !== col) { push(); cell = []; }
+      if (!cell.length) col = a;
+      cell.push(w);
+    }
+    push();
+  } });
+  const alphaOf = cells => cells.filter(c => c.length <= 3 && c.every(w => !w.colon && !/[\d@]/.test(w.text) && /\p{L}/u.test(w.text) && lettersOnly(w.text)));
+  const nameCols = [];
+  for (const [k, cells] of cols) {
+    const alpha = alphaOf(cells);
+    const named = alpha.filter(c => c.some(w => w.cat === 'names'));
+    if (alpha.length < 4 || named.length < 3 || named.length / alpha.length < 0.3) continue;
+    markNames(alpha, extra); nameCols.push(k);
+  }
+  // "LAST | FIRST" tables: the column just left of a names column, one or two words per row, is surnames.
+  for (const k of nameCols) {
+    let j = k - 1; while (j >= 0 && !(cols.has(j) && cols.get(j).length >= 4)) j--;
+    if (j < 0 || nameCols.includes(j)) continue;
+    const rows = new Set(cols.get(k).filter(c => c.some(w => w.cat === 'names')).map(c => c.li));
+    const alpha = alphaOf(cols.get(j)).filter(c => c.length <= 2);
+    const aligned = alpha.filter(c => rows.has(c.li));
+    if (alpha.length >= 4 && aligned.length >= 3 && aligned.length >= alpha.length * 0.6 && alpha.length >= cols.get(j).length * 0.6) markNames(aligned, extra);
+  }
+}
+function markNames(cells, extra) {
+  for (const c of cells) {
+    if (c.every(w => isVocab(w.text, extra))) continue; // column header like "LAST NAME"
+    c.forEach(w => { if (['text', 'orgs', 'places', 'labels', 'names'].includes(w.cat) && !isVocab(w.text, extra)) w.cat = 'names'; });
+  }
 }
 
 // Use the AI model's labels (w.ner) to catch names / companies / places without labels.
@@ -111,7 +167,9 @@ export function classify(words, extraWords = new Set(), useNer = false) {
   lines.forEach((l, li) => {
     // A header row: every word is a structural word and there are at least 2.
     if (l.ws.length >= 2 && l.ws.every(w => isVocab(w.text, extraWords))) {
-      headers = l.ws.map(w => ({ x0: w.b.x0, x1: w.b.x1, cat: contextOf(norm(w.text)), li }));
+      // header cells are runs, so "LAST NAME" stays one phrase
+      headers = l.runs.map(r => ({ x0: r[0].b.x0, x1: r[r.length - 1].b.x1, h: r[0].b.y1 - r[0].b.y0, cat: contextOf(r.map(w => norm(w.text)).join(' ')), li }))
+        .sort((a, b) => a.x0 - b.x0);
     }
     for (const run of l.runs) {
       // "Label:" at the start of a run
@@ -128,10 +186,11 @@ export function classify(words, extraWords = new Set(), useNer = false) {
         if (w.cat) continue;
         // column context from a header row above
         let cctx = ctx;
-        if (!cctx && headers.length && li - headers[0].li <= 25) {
-          const cx = (w.b.x0 + w.b.x1) / 2;
-          const hd = headers.find(h => cx >= h.x0 - (h.x1 - h.x0) * 0.6 && cx <= h.x1 + (h.x1 - h.x0) * 0.6);
-          if (hd) cctx = hd.cat;
+        if (!cctx && headers.length && li - headers[0].li <= 60 && li > headers[0].li) {
+          // left-aligned columns: the right-most header starting at or before this word
+          const tol = headers[0].h * 1.5;
+          let hd = null; for (const h of headers) if (h.x0 - tol <= w.b.x0) hd = h;
+          if (hd && w.b.x0 <= hd.x1 + tol * 6) cctx = hd.cat;
         }
         let n;
         if (isEmail(w.text)) { w.cat = 'emails'; continue; }
@@ -162,6 +221,7 @@ export function classify(words, extraWords = new Set(), useNer = false) {
   });
   detectNames(lines, extraWords);
   if (useNer) applyNer(words);
+  columnVote(lines, extraWords);
   // Headings: noticeably larger text with no digits keeps its unknown words visible.
   const hs = words.map(w => w.b.y1 - w.b.y0).sort((a, b) => a - b), med = hs[Math.floor(hs.length / 2)] || 0;
   for (const l of lines) {

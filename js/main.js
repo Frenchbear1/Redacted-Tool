@@ -1,9 +1,9 @@
-import { CATS, PRESETS, classify, nerLines } from './classify.js';
-import { ai, loadModel, runModel, isCached } from './ner.js';
-import { loadImage, loadPdf, scanPage, warmUp, scramble } from './ocr.js';
-import { render } from './paint.js';
-import { invalidate, saveFiles } from './exporter.js';
-import { initViewer, openViewer, refreshViewer } from './viewer.js';
+import { CATS, PRESETS, classify, nerLines, nerText } from './classify.js?v=5';
+import { ai, loadModel, runModel, isCached } from './ner.js?v=5';
+import { loadImage, loadPdf, scanPage, warmUp, scramble } from './ocr.js?v=5';
+import { render } from './paint.js?v=5';
+import { invalidate, saveFiles } from './exporter.js?v=5';
+import { initViewer, openViewer, refreshViewer } from './viewer.js?v=5';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -211,7 +211,7 @@ function reclassifyAll() {
 async function nerPage(pg, onP) {
   const runs = nerLines(pg.words);
   onP && onP(0.5);
-  const labels = await runModel(runs.map(r => r.map(w => w.text)));
+  const labels = await runModel(runs.map(r => r.map(w => nerText(w.text))));
   runs.forEach((r, i) => r.forEach((w, k) => { w.ner = labels[i] && labels[i][k]; }));
   pg.nerDone = true;
 }

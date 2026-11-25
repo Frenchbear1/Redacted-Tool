@@ -1,6 +1,6 @@
 // Full-screen review sheet: tap to toggle words, lasso to hide / show / cover, undo, zoom, compare.
-import { CATS } from './classify.js';
-import { render, polyBox } from './paint.js';
+import { CATS } from './classify.js?v=5';
+import { render, polyBox } from './paint.js?v=5';
 
 const $ = s => document.querySelector(s);
 const NS = 'http://www.w3.org/2000/svg';

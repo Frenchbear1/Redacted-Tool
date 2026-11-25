@@ -6,7 +6,7 @@ export const ai = { ready: false };
 
 function spawn() {
   if (worker) return worker;
-  worker = new Worker(new URL('./ner-worker.js', import.meta.url), { type: 'module' });
+  worker = new Worker(new URL('./ner-worker.js?v=5', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => {
     if (data.type === 'progress') progressFn && progressFn(data.loaded, data.total);
     else if (data.type === 'result' || (data.type === 'error' && data.id)) {
