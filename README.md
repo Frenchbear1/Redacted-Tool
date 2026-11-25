@@ -1,5 +1,7 @@
 # Redacted Tool
 
+**▶ Open the app: https://frenchbear1.github.io/Redacted-Tool/**
+
 Scrub sensitive info out of photos and PDFs while keeping the layout readable, so an AI can learn the structure of a document without seeing the real data.
 
 - **Numbers** become `#`, **letters** become random letters (case kept), **symbols** stay: `jane.doe@mail.com` → `xqzm.tpe@pwea.bok`, `(555) 014-2290` → `(###) ###-####`.
