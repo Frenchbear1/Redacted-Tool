@@ -1,4 +1,5 @@
-import { CATS, PRESETS, classify } from './classify.js';
+import { CATS, PRESETS, classify, nerLines } from './classify.js';
+import { ai, loadModel, runModel, isCached } from './ner.js';
 import { loadImage, loadPdf, scanPage, warmUp, scramble } from './ocr.js';
 import { render } from './paint.js';
 import { invalidate, saveFiles } from './exporter.js';
@@ -8,10 +9,10 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const CHECK = '<svg viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-const LS = 'scrub.settings.v1';
-const state = { cats: new Set(PRESETS.smart), files: [], extra: new Set(), fast: false };
-try { const s = JSON.parse(localStorage.getItem(LS) || 'null'); if (s) { state.cats = new Set(s.cats); state.fast = !!s.fast; $('#keepWords').value = s.keep || ''; } } catch (e) { /* storage blocked */ }
-const persist = () => { try { localStorage.setItem(LS, JSON.stringify({ cats: [...state.cats], fast: state.fast, keep: $('#keepWords').value })); } catch (e) { /* ignore */ } };
+const LS = 'scrub.settings.v2';
+const state = { cats: new Set(PRESETS.smart), files: [], extra: new Set(), fast: false, ai: false };
+try { const s = JSON.parse(localStorage.getItem(LS) || 'null'); if (s) { state.cats = new Set(s.cats); state.fast = !!s.fast; state.ai = !!s.ai; $('#keepWords').value = s.keep || ''; } } catch (e) { /* storage blocked */ }
+const persist = () => { try { localStorage.setItem(LS, JSON.stringify({ cats: [...state.cats], fast: state.fast, ai: state.ai, keep: $('#keepWords').value })); } catch (e) { /* ignore */ } };
 const extraFrom = v => new Set(v.toLowerCase().split(/[,\n]+/).flatMap(s => s.trim().split(/\s+/)).filter(Boolean));
 state.extra = extraFrom($('#keepWords').value);
 document.querySelector(`input[name=q][value=${state.fast ? 'fast' : 'thorough'}]`).checked = true;
@@ -148,7 +149,8 @@ async function processFile(f) {
     for (let i = 0; i < N; i++) {
       if (!state.files.includes(f)) return;
       await scanPage(f.pages[i], fast, (label, p) => progress(f, `${label}${N > 1 ? ` · page ${i + 1} of ${N}` : ''}…`, (i + p) / N));
-      classify(f.pages[i].words, state.extra);
+      if (state.ai && ai.ready) await nerPage(f.pages[i], p => progress(f, `Finding names with AI${N > 1 ? ` · page ${i + 1} of ${N}` : ''}…`, (i + p) / N));
+      classify(f.pages[i].words, state.extra, useAi());
     }
     f.status = 'done'; f.el.classList.remove('busy');
     f.el.querySelector('.state').innerHTML = `<span class="done-tick">${CHECK}</span>`;
@@ -195,10 +197,63 @@ $('#keepWords').oninput = () => {
   clearTimeout(kwT);
   kwT = setTimeout(() => {
     state.extra = extraFrom($('#keepWords').value); persist();
-    for (const f of state.files) if (f.status === 'done') { f.pages.forEach(pg => classify(pg.words, state.extra)); renderFile(f); }
+    reclassifyAll();
     drawChips();
   }, 450);
 };
+
+// ---------- AI model ----------
+const useAi = () => state.ai && ai.ready;
+function reclassifyAll() {
+  for (const f of state.files) if (f.status === 'done') { f.pages.forEach(pg => classify(pg.words, state.extra, useAi())); renderFile(f); }
+  drawChips();
+}
+async function nerPage(pg, onP) {
+  const runs = nerLines(pg.words);
+  onP && onP(0.5);
+  const labels = await runModel(runs.map(r => r.map(w => w.text)));
+  runs.forEach((r, i) => r.forEach((w, k) => { w.ner = labels[i] && labels[i][k]; }));
+  pg.nerDone = true;
+}
+async function nerBackfill() {
+  for (const f of state.files) if (f.status === 'done') {
+    for (const pg of f.pages) if (!pg.nerDone) { try { await nerPage(pg); } catch (e) { console.error(e); } }
+  }
+  reclassifyAll();
+}
+const aiBtn = $('#aiBtn'), aiBox = $('#ai'), aiSub = $('#aiSub'), aiBar = $('#aiBar');
+const AI_IDLE = aiSub.textContent;
+const mb = n => (n / 1048576).toFixed(0);
+function aiUI() {
+  aiBtn.setAttribute('aria-checked', String(state.ai));
+  aiBox.classList.toggle('loading', state.ai && !ai.ready);
+}
+async function startAi(firstTime) {
+  aiUI(); aiBar.hidden = false; aiBar.firstChild.style.width = '2%';
+  aiSub.textContent = firstTime ? 'Starting download…' : 'Loading the model…';
+  try {
+    await loadModel((loaded, total) => {
+      if (!total) return;
+      aiBar.firstChild.style.width = Math.max(2, Math.round(loaded / total * 100)) + '%';
+      aiSub.textContent = loaded >= total ? 'Preparing the model…' : `Downloading ${mb(loaded)} of ${mb(total)} MB. Keep this page open.`;
+    });
+    aiBar.hidden = true;
+    aiSub.textContent = 'On. Names, companies and places are found by AI on this device.';
+    aiUI();
+    if (firstTime) toast('AI detection is ready');
+    nerBackfill();
+  } catch (e) {
+    console.error(e);
+    state.ai = false; persist(); aiUI(); aiBar.hidden = true;
+    aiSub.textContent = 'Couldn\u2019t load the model. Check your connection and try again.';
+  }
+}
+aiBtn.onclick = async () => {
+  state.ai = !state.ai; persist(); aiUI();
+  if (state.ai) startAi(!(await isCached()));
+  else { aiSub.textContent = AI_IDLE; aiBar.hidden = true; reclassifyAll(); }
+};
+if (state.ai) startAi(false); else aiUI();
 
 initViewer({
   catsOf, toast,

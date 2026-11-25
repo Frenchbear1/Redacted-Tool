@@ -5,6 +5,7 @@
 Scrub sensitive info out of photos and PDFs while keeping the layout readable, so an AI can learn the structure of a document without seeing the real data.
 
 - **Smart filter**: every value is sorted into a type — names, emails, phone numbers, addresses, dates, money, IDs & account numbers, other numbers, links & usernames, other text — and you pick which types get scrubbed (with live counts). Presets: Smart, Names only, Contact info, Numbers, Everything. Labels and headings (`Name:`, `Total Due:`, column headers, big titles) stay readable by default.
+- **Enhanced detection (optional AI)**: flip the switch to download a name-recognition model ([Xenova/bert-base-NER](https://huggingface.co/Xenova/bert-base-NER), ~110 MB, one time). It runs on your device in a background worker and finds names, companies and places even without labels. Adds the **Companies & orgs** and **Places** categories. Only the model is downloaded; your files never leave the device.
 - **Scrambling**: numbers become `#`, letters become `a` (`A` if capital), symbols stay: `jane.doe@mail.com` → `aaaa.aaa@aaaa.aaa`, `(555) 014-2290` → `(###) ###-####`.
 - **Review & edit**: tap any word to hide/show it, or draw a lasso to **Hide** words, **Show** words (also removes covers), or **Cover** any area (photos, logos, signatures). Undo, zoom, hold-to-compare, and per-file filter overrides.
 - **Exports match the input**: PNG → PNG, JPG → JPG, WebP → WebP, PDF → PDF (multi-page). **Save all** saves each file separately (on phones it opens the share sheet); **.zip** bundles them. HEIC/GIF/BMP come back as JPG/PNG.
@@ -22,6 +23,8 @@ js/vocab.js       label words, first/last names, states, street types
 js/paint.js       draws the scrubbed page
 js/viewer.js      review sheet: tap, lasso, cover, undo, zoom
 js/exporter.js    same-format export, share/download, zip
+js/ner.js         AI model client (download, progress, run)
+js/ner-worker.js  AI model worker (transformers.js)
 vendor/           third-party libraries (local copies)
 ```
 
@@ -37,8 +40,8 @@ then go to http://localhost:8000. (Opening the file directly with `file://` won'
 
 ## Limits
 
-Text recognition can miss tiny, faint, stylized or handwritten text, and it doesn't detect photos, logos or signatures (use Cover). Name detection uses labels (`Name:`, `Customer:`…), column headers, titles (Mr., Dr.) and a list of common first/last names, so unusual names outside those cues land in "Other text". Always review each file before sharing it. Scanning uses three passes per page (normal, light-on-dark, and a block pass for short isolated values); "Faster, lower detail scan" skips the light-on-dark pass and uses lower resolution.
+Text recognition can miss tiny, faint, stylized or handwritten text, and it doesn't detect photos, logos or signatures (use Cover). Name detection uses labels (`Name:`, `Customer:`…), column headers, titles (Mr., Dr.) and a list of common first/last names, so unusual names outside those cues land in "Other text" unless Enhanced detection is on. Always review each file before sharing it. Scanning uses three passes per page (normal, light-on-dark, and a block pass for short isolated values); "Faster, lower detail scan" skips the light-on-dark pass and uses lower resolution.
 
 ## Third-party code (in `vendor/`)
 
-Tesseract.js 5.1.1 + tesseract.js-core (Apache-2.0), English trained data from tesseract-ocr (Apache-2.0), pdf.js 3.11.174 (Apache-2.0), jsPDF 2.5.1 (MIT), JSZip 3.10.1 (MIT).
+Tesseract.js 5.1.1 + tesseract.js-core (Apache-2.0), English trained data from tesseract-ocr (Apache-2.0), pdf.js 3.11.174 (Apache-2.0), Transformers.js 4.3.2 (Apache-2.0; loaded from jsDelivr only when AI is turned on), jsPDF 2.5.1 (MIT), JSZip 3.10.1 (MIT).

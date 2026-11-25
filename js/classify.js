@@ -3,6 +3,8 @@ import { LABELS, MONTHS, STREET, STATES, TITLES, FIRST, LAST, CONTEXT } from './
 
 export const CATS = [
   { id: 'names', label: 'Names', on: true },
+  { id: 'orgs', label: 'Companies & orgs', on: true },
+  { id: 'places', label: 'Places', on: true },
   { id: 'emails', label: 'Emails', on: true },
   { id: 'phones', label: 'Phone numbers', on: true },
   { id: 'addresses', label: 'Addresses', on: true },
@@ -20,6 +22,7 @@ export const PRESETS = {
   smart: CATS.filter(c => c.on).map(c => c.id),
   names: ['names'],
   contact: ['names', 'emails', 'phones', 'addresses', 'links'],
+  people: ['names', 'orgs', 'places'],
   numbers: ['phones', 'dates', 'amounts', 'ids', 'numbers'],
 };
 
@@ -81,7 +84,26 @@ function joinMatch(vals, i, re, max = 4) {
   return 0;
 }
 
-export function classify(words, extraWords = new Set()) {
+// Word groups the AI model reads as one sentence (a visual line segment).
+export function nerLines(words) {
+  const out = [];
+  for (const l of buildLines(words)) for (const run of l.runs) out.push(run);
+  return out;
+}
+
+// Use the AI model's labels (w.ner) to catch names / companies / places without labels.
+function applyNer(words) {
+  for (const w of words) {
+    const n = w.ner; if (!n || n.e === 'MISC' || w.colon) continue;
+    if (/[\d@]/.test(w.text) || !/\p{L}/u.test(w.text)) continue;
+    const cat = n.e === 'PER' ? 'names' : n.e === 'ORG' ? 'orgs' : n.e === 'LOC' ? 'places' : null;
+    if (!cat) continue;
+    if (w.cat === 'text' && n.s > 0.55) w.cat = cat;
+    else if (w.cat === 'labels' && n.s > 0.85 && isCap(w.text)) w.cat = cat;
+  }
+}
+
+export function classify(words, extraWords = new Set(), useNer = false) {
   for (const w of words) { w.cat = null; w.colon = false; }
   const lines = buildLines(words);
   let headers = []; // column headers: {x0,x1,cat,line}
@@ -139,6 +161,7 @@ export function classify(words, extraWords = new Set()) {
     }
   });
   detectNames(lines, extraWords);
+  if (useNer) applyNer(words);
   // Headings: noticeably larger text with no digits keeps its unknown words visible.
   const hs = words.map(w => w.b.y1 - w.b.y0).sort((a, b) => a - b), med = hs[Math.floor(hs.length / 2)] || 0;
   for (const l of lines) {
